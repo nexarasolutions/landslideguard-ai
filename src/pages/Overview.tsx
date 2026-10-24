@@ -2,7 +2,7 @@ import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recha
 import { api } from '../services/api';
 import { useAsync } from '../hooks';
 import type { Alert, Reading, Risk, Station } from '../types';
-import { Async, Card, DemoBadge, RC, RiskBadge } from '../components/ui';
+import { Async, Card, LiveStatusBadge, RC, RiskBadge } from '../components/ui';
 import StationMap from '../components/StationMap';
 import Trend from '../components/Trend';
 
@@ -19,10 +19,11 @@ export default function Overview({ stations, alerts, open }: { stations: Station
   ];
   const dist = (['Low', 'Moderate', 'High', 'Critical'] as Risk[]).map(r => ({ name: r, value: n(s => s.risk === r) }));
   const all = rd.data;
-  const merged: Reading[] = all ? all[0].map((p, i) => ({
-    t: p.t, rainfall: avg(all.map(r => r[i].rainfall)), soil: avg(all.map(r => r[i].soil)), tilt: null, vibration: null
+  const merged: Reading[] = all && all.length > 0 ? all[0].map((p, i) => ({
+    t: p.t, rainfall: avg(all.map(r => r[i]?.rainfall)), soil: avg(all.map(r => r[i]?.soil)), tilt: null, vibration: null
   })) : [];
-  const topData = all ? all[stations.indexOf(top)] : [];
+  const topData = all && top ? all[stations.indexOf(top)] || [] : [];
+  const topId = top ? top.id : 'Network';
 
   return (
     <div className="space-y-4">
@@ -33,8 +34,8 @@ export default function Overview({ stations, alerts, open }: { stations: Station
           </div>))}
       </div>
       <div className="grid gap-4 xl:grid-cols-3">
-        <div className="xl:col-span-2"><Card title="Station risk map" right={<DemoBadge />}><StationMap stations={stations} onSelect={open} /></Card></div>
-        <Card title="Risk distribution (stations)" right={<DemoBadge />}>
+        <div className="xl:col-span-2"><Card title="Station Risk Map" right={<LiveStatusBadge />}><StationMap stations={stations} onSelect={open} /></Card></div>
+        <Card title="Risk Distribution (Network)" right={<LiveStatusBadge />}>
           <div className="h-72" role="img" aria-label="Risk distribution chart"><ResponsiveContainer><PieChart>
             <Pie data={dist} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={2}>{dist.map(d => <Cell key={d.name} fill={RC[d.name as Risk]} stroke="none" />)}</Pie>
             <Tooltip formatter={(v: unknown) => `${v} stations`} contentStyle={{ background: '#0B1220', border: '1px solid #243049' }} /><Legend />
@@ -45,11 +46,11 @@ export default function Overview({ stations, alerts, open }: { stations: Station
         <div className="grid gap-4 lg:grid-cols-2">
           <Trend title="Rainfall, network average" unit="mm/h" data={merged} lines={[{ k: 'rainfall', name: 'Rainfall', c: '#60a5fa' }]} />
           <Trend title="Soil moisture, network average" unit="%" data={merged} lines={[{ k: 'soil', name: 'Soil moisture', c: '#38bdf8' }]} />
-          <Trend title={`Ground tilt · ${top.id}`} unit="°" data={topData} lines={[{ k: 'tilt', name: 'Tilt', c: '#a78bfa' }]} />
-          <Trend title={`Vibration · ${top.id}`} unit="mm/s" data={topData} lines={[{ k: 'vibration', name: 'Vibration', c: '#f0abfc' }]} />
+          <Trend title={`Ground tilt · ${topId}`} unit="°" data={topData} lines={[{ k: 'tilt', name: 'Tilt', c: '#a78bfa' }]} />
+          <Trend title={`Vibration · ${topId}`} unit="mm/s" data={topData} lines={[{ k: 'vibration', name: 'Vibration', c: '#f0abfc' }]} />
         </div>
       </Async>
-      <Card title="Recent alerts" right={<DemoBadge />}>
+      <Card title="Recent Incident Feed" right={<LiveStatusBadge />}>
         <div className="overflow-x-auto"><table className="w-full text-left text-sm">
           <thead className="text-xs text-slate-400"><tr><th className="py-1">Severity</th><th>Station</th><th>Trigger</th><th>Time</th><th>Status</th></tr></thead>
           <tbody>{alerts.slice(0, 4).map(a => (

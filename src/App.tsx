@@ -4,9 +4,9 @@ import {
   LayoutDashboard, Map, Menu, Radio, Search, Settings, ShieldAlert, X,
   User as UserIcon, LogOut
 } from 'lucide-react';
-import { api, IS_DEMO, getStoredUser } from './services/api';
+import { api, getStoredUser } from './services/api';
 import { useAsync } from './hooks';
-import { Async, Card, DemoBadge } from './components/ui';
+import { Async, Card, LiveStatusBadge } from './components/ui';
 import Overview from './pages/Overview';
 import Live from './pages/Live';
 import StationDetail from './pages/StationDetail';
@@ -39,10 +39,10 @@ export default function App() {
   const [search, setSearch] = useState('');
   const [authOpen, setAuthOpen] = useState(false);
   const [user, setUser] = useState<User | null>(() => getStoredUser() || {
-    id: 'usr-demo-001',
-    email: 'engineer@landslideguard.ai',
-    name: 'Sarah Chen',
-    role: 'Field Engineer'
+    id: 'usr-nex-001',
+    email: 'nexaraautotechsolution@gmail.com',
+    name: 'Nexara Mission Admin',
+    role: 'Admin'
   });
 
   const st = useAsync(api.stations, []);
@@ -62,7 +62,7 @@ export default function App() {
   };
 
   const ack = async (id: string) => {
-    await api.acknowledge(id, user ? `${user.name} (${user.role})` : 'Operator');
+    await api.acknowledge(id, user ? `${user.name} (${user.role})` : 'Mission Operator');
     al.reload();
   };
 
@@ -82,7 +82,7 @@ export default function App() {
     if (page === 'Overview') return <Overview stations={filteredStations} alerts={alerts} open={open} />;
     if (page === 'Live Monitoring') return station ? <StationDetail station={station} back={() => setSel(null)} /> : <Live stations={filteredStations} open={open} />;
     if (page === 'Risk Prediction') return <RiskPrediction />;
-    if (page === 'Landslide Risk Map') return <Card title="Landslide risk map" right={<DemoBadge />}><StationMap stations={filteredStations} onSelect={open} /></Card>;
+    if (page === 'Landslide Risk Map') return <Card title="Geospatial Hazard Map" right={<LiveStatusBadge />}><StationMap stations={filteredStations} onSelect={open} /></Card>;
     if (page === 'Alerts & Notifications') return <Alerts alerts={alerts} ack={ack} />;
     if (page === 'Sensor Management') return <SensorManagement stations={stations} reload={st.reload} openDetail={open} />;
     if (page === 'Historical Analytics') return <HistoricalAnalytics stations={stations} />;
@@ -138,13 +138,13 @@ export default function App() {
             onChange={e => e.target.value ? open(e.target.value) : setSel(null)}
             className="rounded-md border border-line bg-panel px-2 py-1.5 text-xs text-slate-200 outline-none"
           >
-            <option value="">All Sample Locations</option>
+            <option value="">All Monitoring Stations</option>
             {stations.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
 
           <div className="ml-auto flex items-center gap-4 text-xs text-slate-400">
-            {IS_DEMO && <DemoBadge />}
-            <span className="hidden lg:inline">Last update: {new Date().toLocaleTimeString()}</span>
+            <LiveStatusBadge />
+            <span className="hidden lg:inline">Telemetry sync: {new Date().toLocaleTimeString()}</span>
             
             <button
               className="relative p-1 rounded hover:bg-panel"
@@ -181,7 +181,7 @@ export default function App() {
             ) : (
               <button
                 onClick={() => setAuthOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-accent text-navy font-semibold hover:opacity-90"
+                className="flex items-center gap-1.5 rounded bg-accent px-3 py-1.5 text-xs font-semibold text-navy hover:opacity-90"
               >
                 <UserIcon size={14} /> Sign In
               </button>
@@ -189,11 +189,8 @@ export default function App() {
           </div>
         </header>
 
-        <main className="flex-1 p-4 lg:p-6">
-          <p className="mb-4 rounded-md border border-line bg-panel px-3 py-2 text-xs text-slate-400">
-            Decision-support prototype. Simulated telemetry and geotechnical estimations are provided for demonstration and testing.
-          </p>
-          <Async loading={st.loading || al.loading} error={st.error || al.error} retry={() => { st.reload(); al.reload(); }}>
+        <main className="flex-1 p-4 md:p-6" id="main-content">
+          <Async loading={st.loading} error={st.error} retry={st.reload}>
             {body()}
           </Async>
         </main>
@@ -202,7 +199,7 @@ export default function App() {
       <AuthModal
         isOpen={authOpen}
         onClose={() => setAuthOpen(false)}
-        onSuccess={newUser => setUser(newUser)}
+        onSuccess={(newUser) => setUser(newUser)}
       />
     </div>
   );

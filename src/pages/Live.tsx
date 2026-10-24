@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { BatteryLow, SignalHigh, WifiOff } from 'lucide-react';
 import type { Station } from '../types';
-import { Card, DemoBadge, RiskBadge, Select } from '../components/ui';
+import { Card, LiveStatusBadge, RiskBadge, Select } from '../components/ui';
 
 const statusCls = { online: 'text-green-400', stale: 'text-yellow-300', offline: 'text-red-400' } as const;
 
@@ -10,10 +10,10 @@ export default function Live({ stations, open }: { stations: Station[]; open: (i
   const rows = stations.filter(s => (risk === 'All' || s.risk === risk) && (status === 'All' || s.status === status) &&
     (s.name + s.id).toLowerCase().includes(q.toLowerCase()));
   return (
-    <Card title="Live monitoring stations" right={<DemoBadge />}>
+    <Card title="Live Geotechnical Telemetry Grid" right={<LiveStatusBadge />}>
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1 text-xs text-slate-400">Search location or ID
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="e.g. Site A" className="rounded-md border border-line bg-navy px-2 py-1.5 text-sm text-slate-100" /></label>
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="e.g. STN-001 or Ridge" className="rounded-md border border-line bg-navy px-2 py-1.5 text-sm text-slate-100" /></label>
         <Select label="Risk level" value={risk} onChange={setRisk} options={['All', 'Low', 'Moderate', 'High', 'Critical']} />
         <Select label="Sensor status" value={status} onChange={setStatus} options={['All', 'online', 'stale', 'offline']} />
       </div>

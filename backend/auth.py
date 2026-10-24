@@ -52,8 +52,15 @@ def decode_token(token: str) -> Optional[dict]:
     except JWTError:
         return None
 
-# In-memory users database initialized with default demo credentials
+# Operational users database with default role credentials
 USERS_DB = {
+    "nexaraautotechsolution@gmail.com": {
+        "id": "usr-nex-001",
+        "email": "nexaraautotechsolution@gmail.com",
+        "name": "Nexara Mission Admin",
+        "role": "Admin",
+        "hashed_password": hash_password("landslide2026")
+    },
     "engineer@landslideguard.ai": {
         "id": "usr-eng-001",
         "email": "engineer@landslideguard.ai",

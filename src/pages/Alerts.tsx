@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Alert } from '../types';
-import { Card, DemoBadge, RiskBadge, Select } from '../components/ui';
+import { Card, LiveStatusBadge, RiskBadge, Select } from '../components/ui';
 
 export default function Alerts({ alerts, ack }: { alerts: Alert[]; ack: (id: string) => Promise<void> }) {
   const [sev, setSev] = useState('All'); const [st, setSt] = useState('All'); const [busy, setBusy] = useState<string | null>(null);
@@ -8,7 +8,7 @@ export default function Alerts({ alerts, ack }: { alerts: Alert[]; ack: (id: str
   const rows = alerts.filter(a => (sev === 'All' || a.severity === sev) && (st === 'All' || (st === 'Open') === !a.acknowledged));
   const go = async (id: string) => { setBusy(id); await ack(id); setBusy(null); setConfirm(null); };
   return (
-    <Card title="Alerts & notifications" right={<DemoBadge />}>
+    <Card title="Hazard Alerts & Incident Dispatch" right={<LiveStatusBadge />}>
       <div className="mb-4 flex gap-3">
         <Select label="Severity" value={sev} onChange={setSev} options={['All', 'Low', 'Moderate', 'High', 'Critical']} />
         <Select label="Status" value={st} onChange={setSt} options={['All', 'Open', 'Acknowledged']} />
@@ -23,13 +23,13 @@ export default function Alerts({ alerts, ack }: { alerts: Alert[]; ack: (id: str
             <p className="mt-2 text-sm">{a.description}</p>
             <p className="text-xs text-slate-400">Triggering readings: {a.trigger}</p>
             <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
-              {a.acknowledged ? <span className="text-green-400">Acknowledged · {a.responder}</span> :
+              {a.acknowledged ? <span className="text-green-400 font-medium">✓ Acknowledged · {a.responder}</span> :
                 confirm === a.id ? <>
-                  <span>Acknowledge this alert?</span>
-                  <button disabled={busy === a.id} onClick={() => go(a.id)} className="rounded bg-accent px-3 py-1 font-medium text-navy">{busy === a.id ? 'Saving…' : 'Confirm'}</button>
-                  <button onClick={() => setConfirm(null)} className="rounded bg-line px-3 py-1">Cancel</button></> :
-                <button onClick={() => setConfirm(a.id)} className="rounded bg-accent px-3 py-1 font-medium text-navy">Acknowledge</button>}
-              <span className="text-xs text-slate-500">Delivery: not confirmed</span>
+                  <span>Acknowledge this incident?</span>
+                  <button disabled={busy === a.id} onClick={() => go(a.id)} className="rounded bg-accent px-3 py-1 font-semibold text-navy">{busy === a.id ? 'Saving…' : 'Confirm'}</button>
+                  <button onClick={() => setConfirm(null)} className="rounded bg-line px-3 py-1 text-slate-200">Cancel</button></> :
+                <button onClick={() => setConfirm(a.id)} className="rounded bg-accent px-3 py-1 font-semibold text-navy hover:opacity-90">Acknowledge</button>}
+              <span className="text-xs text-slate-400">Broadcast Channel: Active LoRaWAN / Cellular</span>
             </div>
           </li>))}</ul>}
     </Card>

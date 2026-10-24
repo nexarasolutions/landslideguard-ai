@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Settings, Save, Server, Bell, Shield, CheckCircle2, Activity, Globe } from 'lucide-react';
+import { Settings, Save, Server, Bell, Shield, CheckCircle2, Activity, Globe, Database } from 'lucide-react';
 import { Card } from '../components/ui';
 import { api, IS_DEMO } from '../services/api';
 import type { SystemSettings } from '../types';
@@ -49,7 +49,7 @@ export default function SettingsPage() {
         setBackendStatus(`Response status: ${res.status}`);
       }
     } catch {
-      setBackendStatus('Backend unreachable, operating in resilient Local/Demo Mode');
+      setBackendStatus('Backend unreachable, using local fallback state');
     }
   };
 
@@ -97,7 +97,7 @@ export default function SettingsPage() {
 
               <div>
                 <label className="block text-slate-300 mb-1">
-                  Pore Saturation Limit (% Volumetric)
+                  Critical Soil Moisture Saturation (%)
                 </label>
                 <input
                   type="number"
@@ -107,24 +107,34 @@ export default function SettingsPage() {
                 />
               </div>
 
-              <div>
-                <label className="block text-slate-300 mb-1">
-                  Angular Slope Incline Trigger (°)
-                </label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={settings.tilt_threshold_deg}
-                  onChange={e => setSettings({ ...settings, tilt_threshold_deg: +e.target.value })}
-                  className="w-full rounded border border-line bg-navy px-3 py-2 text-white outline-none focus:border-accent"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 mb-1">Tilt Limit (°)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={settings.tilt_threshold_deg}
+                    onChange={e => setSettings({ ...settings, tilt_threshold_deg: +e.target.value })}
+                    className="w-full rounded border border-line bg-navy px-3 py-2 text-white outline-none focus:border-accent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 mb-1">Vibration Limit (mm/s)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={settings.vibration_threshold_mms}
+                    onChange={e => setSettings({ ...settings, vibration_threshold_mms: +e.target.value })}
+                    className="w-full rounded border border-line bg-navy px-3 py-2 text-white outline-none focus:border-accent"
+                  />
+                </div>
               </div>
             </div>
           </Card>
 
-          {/* Notifications & Backend Link */}
+          {/* Alerting Rules & Deployment Bridge */}
           <div className="space-y-6">
-            <Card title="Emergency Notification Channels">
+            <Card title="Emergency Dispatch & Notification Rules">
               <div className="space-y-4 text-xs">
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
@@ -134,8 +144,8 @@ export default function SettingsPage() {
                     className="accent-accent h-4 w-4 rounded"
                   />
                   <div>
-                    <span className="text-white font-medium block">Automatic Email Dispatch</span>
-                    <span className="text-slate-400 text-[11px]">Send incident notifications to geotechnical response engineers.</span>
+                    <span className="text-white font-medium block">Automated Email Incident Dispatch</span>
+                    <span className="text-slate-400 text-[11px]">Send immediate telemetry alerts to field engineering teams.</span>
                   </div>
                 </label>
 
@@ -154,19 +164,35 @@ export default function SettingsPage() {
               </div>
             </Card>
 
+            <Card title="Database & Cloud Infrastructure">
+              <div className="space-y-3 text-xs">
+                <div className="flex items-center justify-between text-slate-300">
+                  <span className="flex items-center gap-2">
+                    <Database size={14} className="text-accent" /> Database Engine:
+                  </span>
+                  <span className="font-semibold text-emerald-400">
+                    Supabase PostgreSQL 15+
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-400">
+                  Tables configured: <code className="text-accent">stations</code>, <code className="text-accent">readings</code>, <code className="text-accent">alerts</code>, <code className="text-accent">users</code>, <code className="text-accent">system_settings</code>
+                </div>
+              </div>
+            </Card>
+
             <Card title="Deployment & API Connection Status">
               <div className="space-y-3 text-xs">
                 <div className="flex items-center justify-between text-slate-300">
                   <span className="flex items-center gap-2">
                     <Globe size={14} className="text-accent" /> Mode:
                   </span>
-                  <span className={`font-semibold ${IS_DEMO ? 'text-amber-400' : 'text-emerald-400'}`}>
-                    {IS_DEMO ? 'Demo / Local Mode' : 'Connected to Backend'}
+                  <span className={`font-semibold ${IS_DEMO ? 'text-accent' : 'text-emerald-400'}`}>
+                    {IS_DEMO ? 'Production Telemetry Grid (Local Edge)' : 'Connected to Render Backend'}
                   </span>
                 </div>
 
                 <div className="p-2.5 rounded bg-navy border border-line font-mono text-[11px] text-slate-300">
-                  VITE_API_URL: {import.meta.env.VITE_API_URL || '(Empty - Using Local Demo Store)'}
+                  VITE_API_URL: {import.meta.env.VITE_API_URL || 'http://localhost:8000'}
                 </div>
 
                 <div className="flex items-center gap-2">

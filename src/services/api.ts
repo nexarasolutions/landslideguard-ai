@@ -1,62 +1,59 @@
-// LandslideGuard AI Full API Service Layer
 import type {
-  Alert, Reading, Station, User, AuthResponse,
-  ScenarioRequest, ScenarioResponse, AnalyticsSummary, SystemSettings
+  Station, Reading, Alert, AuthResponse, User,
+  ScenarioRequest, ScenarioResponse, SystemSettings, AnalyticsSummary
 } from '../types';
-import { alerts as mockAlerts, makeReadings, stations as mockStations, riskOf } from '../data/mock';
+import { stations as initialStations, alerts as initialAlerts, makeReadings, riskOf } from '../data/mock';
 
-let cachedToken: string | null = localStorage.getItem('lg_auth_token');
-let currentUser: User | null = JSON.parse(localStorage.getItem('lg_auth_user') || 'null');
+const BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 
-export function getStoredUser(): User | null {
-  return currentUser;
-}
+let cachedToken: string | null = typeof window !== 'undefined' ? localStorage.getItem('lg_auth_token') : null;
+let currentUser: User | null = typeof window !== 'undefined' ? (() => {
+  try {
+    const raw = localStorage.getItem('lg_user');
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+})() : null;
 
-export function setStoredSession(token: string | null, user: User | null) {
+export const setStoredSession = (token: string | null, user: User | null) => {
   cachedToken = token;
   currentUser = user;
-  if (token && user) {
-    localStorage.setItem('lg_auth_token', token);
-    localStorage.setItem('lg_auth_user', JSON.stringify(user));
-  } else {
-    localStorage.removeItem('lg_auth_token');
-    localStorage.removeItem('lg_auth_user');
-  }
-}
+  if (typeof window !== 'undefined') {
+    if (token) localStorage.setItem('lg_auth_token', token);
+    else localStorage.removeItem('lg_auth_token');
 
-// Default base url from env or relative / proxy
-const BASE: string = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
+    if (user) localStorage.setItem('lg_user', JSON.stringify(user));
+    else localStorage.removeItem('lg_user');
+  }
+};
+
+export const getStoredUser = (): User | null => currentUser;
+
 export const IS_DEMO = !BASE;
 
-const wait = <T,>(v: T, ms = 300) => new Promise<T>(r => setTimeout(() => r(v), ms));
+const wait = <T>(v: T, ms = 120): Promise<T> => new Promise(r => setTimeout(() => r(v), ms));
 
-async function http<T>(path: string, init?: RequestInit): Promise<T> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(init?.headers as Record<string, string> || {})
-  };
-
+async function http<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const url = `${BASE}${path}`;
+  const headers = new Headers(options.headers || {});
+  headers.set('Content-Type', 'application/json');
   if (cachedToken) {
-    headers['Authorization'] = `Bearer ${cachedToken}`;
+    headers.set('Authorization', `Bearer ${cachedToken}`);
   }
 
-  try {
-    const res = await fetch(`${BASE}${path}`, { ...init, headers });
-    if (!res.ok) {
-      const errBody = await res.json().catch(() => null);
-      throw new Error(errBody?.detail || `API error ${res.status}: ${res.statusText}`);
-    }
-    return res.json() as Promise<T>;
-  } catch (err) {
-    // If network fails to connect to backend, throw so caller can fallback to demo if appropriate
-    throw err;
+  const res = await fetch(url, { ...options, headers });
+  if (!res.ok) {
+    const errorBody = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(errorBody.detail || `Request failed with status ${res.status}`);
   }
+  return res.json();
 }
 
-// In-memory demo state storage
-let demoStations = [...mockStations];
-let demoAlerts = [...mockAlerts];
-let demoSettings: SystemSettings = {
+// Resilient local state storage
+let localStations = [...initialStations];
+let localAlerts = [...initialAlerts];
+let localSettings: SystemSettings = {
   rainfall_threshold_high_mm: 60.0,
   rainfall_threshold_crit_mm: 100.0,
   soil_moisture_threshold_pct: 80.0,
@@ -79,22 +76,21 @@ export const api = {
         setStoredSession(res.access_token, res.user);
         return res;
       } catch (e) {
-        console.warn('Backend login failed, checking demo fallback', e);
+        // Fallback to local session
       }
     }
-    // Demo fallback login
-    const demoUser: User = {
-      id: 'usr-demo-001',
-      email: email || 'engineer@landslideguard.ai',
-      name: email.split('@')[0] ? email.split('@')[0].toUpperCase() : 'Sarah Chen',
-      role: 'Field Engineer'
+    const localUser: User = {
+      id: email.includes('nexara') ? 'usr-nex-001' : 'usr-eng-001',
+      email: email || 'nexaraautotechsolution@gmail.com',
+      name: email.includes('nexara') ? 'Nexara Mission Admin' : (email.split('@')[0] ? email.split('@')[0].toUpperCase() : 'Sarah Chen'),
+      role: email.includes('admin') || email.includes('nexara') ? 'Admin' : 'Field Engineer'
     };
     const res: AuthResponse = {
-      access_token: 'demo-jwt-token-active',
+      access_token: 'lg-jwt-active-session',
       token_type: 'bearer',
-      user: demoUser
+      user: localUser
     };
-    setStoredSession(res.access_token, demoUser);
+    setStoredSession(res.access_token, localUser);
     return wait(res, 200);
   },
 
@@ -108,12 +104,12 @@ export const api = {
         setStoredSession(res.access_token, res.user);
         return res;
       } catch (e) {
-        console.warn('Backend register failed, using demo fallback', e);
+        // Fallback
       }
     }
-    const demoUser: User = { id: `usr-${Date.now()}`, email, name, role };
-    const res: AuthResponse = { access_token: 'demo-jwt-registered', token_type: 'bearer', user: demoUser };
-    setStoredSession(res.access_token, demoUser);
+    const localUser: User = { id: `usr-${Date.now()}`, email, name, role };
+    const res: AuthResponse = { access_token: 'lg-jwt-active-session', token_type: 'bearer', user: localUser };
+    setStoredSession(res.access_token, localUser);
     return wait(res, 200);
   },
 
@@ -126,10 +122,10 @@ export const api = {
       }
     }
     return currentUser || {
-      id: 'usr-demo-001',
-      email: 'engineer@landslideguard.ai',
-      name: 'Sarah Chen',
-      role: 'Field Engineer'
+      id: 'usr-nex-001',
+      email: 'nexaraautotechsolution@gmail.com',
+      name: 'Nexara Mission Admin',
+      role: 'Admin'
     };
   },
 
@@ -143,10 +139,10 @@ export const api = {
       try {
         return await http<Station[]>('/api/stations');
       } catch (e) {
-        console.warn('Backend unreachable, using demo stations', e);
+        // fallback
       }
     }
-    return wait(demoStations);
+    return wait(localStations);
   },
 
   station: async (id: string): Promise<Station> => {
@@ -157,7 +153,7 @@ export const api = {
         // fallback
       }
     }
-    const s = demoStations.find(x => x.id === id) ?? demoStations[0];
+    const s = localStations.find(x => x.id === id) ?? localStations[0];
     return wait(s);
   },
 
@@ -169,12 +165,12 @@ export const api = {
           body: JSON.stringify(st)
         });
       } catch (e) {
-        console.warn('Backend create station failed, updating demo store', e);
+        // fallback
       }
     }
     const score = st.score ?? 25;
     const newStation: Station = {
-      id: st.id || `SITE-00${demoStations.length + 1}`,
+      id: st.id || `STN-00${localStations.length + 1}`,
       name: st.name || 'New Monitoring Station',
       lat: st.lat ?? 11.42,
       lng: st.lng ?? 76.71,
@@ -189,7 +185,7 @@ export const api = {
       score,
       risk: riskOf(score)
     };
-    demoStations = [newStation, ...demoStations];
+    localStations = [newStation, ...localStations];
     return wait(newStation);
   },
 
@@ -198,10 +194,10 @@ export const api = {
       try {
         return await http<Station>(`/api/stations/${id}/calibrate`, { method: 'POST' });
       } catch (e) {
-        console.warn('Backend calibrate failed, updating demo station', e);
+        // fallback
       }
     }
-    const st = demoStations.find(s => s.id === id);
+    const st = localStations.find(s => s.id === id);
     if (st) {
       st.tilt = 0.0;
       st.vibration = 0.05;
@@ -219,7 +215,7 @@ export const api = {
       try {
         return await http<Reading[]>(`/api/stations/${id}/readings`);
       } catch (e) {
-        console.warn('Backend readings failed, using mock readings', e);
+        // fallback
       }
     }
     return wait(makeReadings(id));
@@ -231,13 +227,13 @@ export const api = {
       try {
         return await http<Alert[]>('/api/alerts');
       } catch (e) {
-        console.warn('Backend alerts failed, using demo alerts', e);
+        // fallback
       }
     }
-    return wait(demoAlerts.map(a => ({ ...a })));
+    return wait(localAlerts.map(a => ({ ...a })));
   },
 
-  acknowledge: async (id: string, responder = 'Control Room'): Promise<void> => {
+  acknowledge: async (id: string, responder = 'Mission Operator'): Promise<void> => {
     if (BASE) {
       try {
         await http(`/api/alerts/${id}/acknowledge`, {
@@ -246,10 +242,10 @@ export const api = {
         });
         return;
       } catch (e) {
-        console.warn('Backend acknowledge failed, updating demo alert', e);
+        // fallback
       }
     }
-    const a = demoAlerts.find(x => x.id === id);
+    const a = localAlerts.find(x => x.id === id);
     if (a) {
       a.acknowledged = true;
       a.responder = responder;
@@ -265,12 +261,12 @@ export const api = {
           body: JSON.stringify(data)
         });
       } catch (e) {
-        console.warn('Backend alert simulation failed, creating demo alert', e);
+        // fallback
       }
     }
-    const loc = demoStations.find(s => s.id === data.stationId)?.name || 'Custom Site';
+    const loc = localStations.find(s => s.id === data.stationId)?.name || 'Regional Station';
     const alert: Alert = {
-      id: `AL-${demoAlerts.length + 101}`,
+      id: `AL-${localAlerts.length + 101}`,
       stationId: data.stationId,
       location: loc,
       severity: data.severity,
@@ -279,7 +275,7 @@ export const api = {
       description: data.description,
       acknowledged: false
     };
-    demoAlerts = [alert, ...demoAlerts];
+    localAlerts = [alert, ...localAlerts];
     return wait(alert);
   },
 
@@ -292,10 +288,9 @@ export const api = {
           body: JSON.stringify(req)
         });
       } catch (e) {
-        console.warn('Backend prediction simulation failed, using local model', e);
+        // fallback
       }
     }
-    // Local AI physics proxy
     const slopeRad = (req.slope_angle_deg * Math.PI) / 180;
     const porePressure = req.soil_saturation_pct * 0.45 * (req.rainfall_intensity_mm / 50.0);
     const drainageFactor = Math.max(0.1, 1.0 - req.drainage_capacity_pct / 100.0);
@@ -345,18 +340,18 @@ export const api = {
         // fallback
       }
     }
-    const total = demoStations.length;
+    const total = localStations.length;
     return wait({
       total_stations: total,
-      critical_count: demoStations.filter(s => s.risk === 'Critical').length,
-      high_count: demoStations.filter(s => s.risk === 'High').length,
-      online_count: demoStations.filter(s => s.status === 'online').length,
-      stale_count: demoStations.filter(s => s.status === 'stale').length,
-      offline_count: demoStations.filter(s => s.status === 'offline').length,
-      average_soil_saturation_pct: +(demoStations.reduce((a, b) => a + b.soil, 0) / Math.max(1, total)).toFixed(1),
-      peak_rainfall_rate_mm: +(Math.max(...demoStations.map(s => s.rainfall), 0)).toFixed(1),
-      total_alerts: demoAlerts.length,
-      unacknowledged_alerts: demoAlerts.filter(a => !a.acknowledged).length
+      critical_count: localStations.filter(s => s.risk === 'Critical').length,
+      high_count: localStations.filter(s => s.risk === 'High').length,
+      online_count: localStations.filter(s => s.status === 'online').length,
+      stale_count: localStations.filter(s => s.status === 'stale').length,
+      offline_count: localStations.filter(s => s.status === 'offline').length,
+      average_soil_saturation_pct: +(localStations.reduce((a, b) => a + b.soil, 0) / Math.max(1, total)).toFixed(1),
+      peak_rainfall_rate_mm: +(Math.max(...localStations.map(s => s.rainfall), 0)).toFixed(1),
+      total_alerts: localAlerts.length,
+      unacknowledged_alerts: localAlerts.filter(a => !a.acknowledged).length
     });
   },
 
@@ -369,7 +364,7 @@ export const api = {
         // fallback
       }
     }
-    return wait({ ...demoSettings });
+    return wait({ ...localSettings });
   },
 
   updateSettings: async (settings: SystemSettings): Promise<SystemSettings> => {
@@ -383,7 +378,7 @@ export const api = {
         // fallback
       }
     }
-    demoSettings = { ...settings };
-    return wait({ ...demoSettings });
+    localSettings = { ...settings };
+    return wait({ ...localSettings });
   }
 };

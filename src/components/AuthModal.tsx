@@ -65,10 +65,17 @@ export default function AuthModal({ isOpen, onClose, onSuccess }: Props) {
           </h2>
         </div>
 
-        {/* Demo Fast Logins */}
+        {/* Preset Operational Role Logins */}
         <div className="mb-4 p-3 rounded-lg bg-navy/60 border border-line text-xs">
-          <div className="text-slate-400 mb-2 font-medium">Quick Demo Profiles:</div>
+          <div className="text-slate-400 mb-2 font-medium">Preset Mission Roles:</div>
           <div className="flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              onClick={() => setDemoAccount('nexaraautotechsolution@gmail.com', 'Admin', 'Nexara Admin')}
+              className="px-2 py-1 rounded bg-panel border border-accent/60 text-[11px] text-accent hover:border-accent"
+            >
+              Nexara Admin
+            </button>
             <button
               type="button"
               onClick={() => setDemoAccount('engineer@landslideguard.ai', 'Field Engineer', 'Sarah Chen')}
@@ -82,13 +89,6 @@ export default function AuthModal({ isOpen, onClose, onSuccess }: Props) {
               className="px-2 py-1 rounded bg-panel border border-line text-[11px] text-slate-200 hover:border-accent"
             >
               Geologist
-            </button>
-            <button
-              type="button"
-              onClick={() => setDemoAccount('admin@landslideguard.ai', 'Admin', 'Marcus Vance')}
-              className="px-2 py-1 rounded bg-panel border border-line text-[11px] text-slate-200 hover:border-accent"
-            >
-              Admin
             </button>
           </div>
         </div>

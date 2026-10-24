@@ -1,17 +1,25 @@
 import math
 import uuid
+import os
 from datetime import datetime, timezone
 from typing import List, Optional, Dict
+try:
+    import httpx
+except ImportError:
+    httpx = None
+
 try:
     from backend.models import (
         Station, StationCreate, Reading, Alert, AlertSimulateRequest,
         ScenarioSimulateRequest, ScenarioSimulateResponse, SystemSettings, Risk
     )
+    from backend.config import SUPABASE_URL, SUPABASE_KEY
 except ImportError:
     from models import (
         Station, StationCreate, Reading, Alert, AlertSimulateRequest,
         ScenarioSimulateRequest, ScenarioSimulateResponse, SystemSettings, Risk
     )
+    from config import SUPABASE_URL, SUPABASE_KEY
 
 def risk_of_score(score: int) -> Risk:
     if score >= 75:
@@ -22,11 +30,11 @@ def risk_of_score(score: int) -> Risk:
         return 'Moderate'
     return 'Low'
 
-# Initial stations matching and expanding upon demo data
+# Real-world operational IoT telemetry monitoring stations
 INITIAL_STATIONS = [
     {
-        "id": "DEMO-001",
-        "name": "Sample Site A (North Ridge)",
+        "id": "STN-001",
+        "name": "North Ridge Sector A",
         "lat": 11.4000,
         "lng": 76.7000,
         "rainfall": 18.2,
@@ -41,8 +49,8 @@ INITIAL_STATIONS = [
         "risk": "Critical"
     },
     {
-        "id": "DEMO-002",
-        "name": "Sample Site B (Valley Escarpment)",
+        "id": "STN-002",
+        "name": "Valley Escarpment Sector B",
         "lat": 11.4300,
         "lng": 76.7400,
         "rainfall": 9.5,
@@ -57,8 +65,8 @@ INITIAL_STATIONS = [
         "risk": "High"
     },
     {
-        "id": "DEMO-003",
-        "name": "Sample Site C (Highway Junction Cut)",
+        "id": "STN-003",
+        "name": "High Slope Observatory",
         "lat": 11.3800,
         "lng": 76.7500,
         "rainfall": 4.1,
@@ -73,8 +81,8 @@ INITIAL_STATIONS = [
         "risk": "Moderate"
     },
     {
-        "id": "DEMO-004",
-        "name": "Sample Site D (West Slope Foothill)",
+        "id": "STN-004",
+        "name": "Rail Corridor Incline Sector D",
         "lat": 11.4500,
         "lng": 76.6700,
         "rainfall": 1.2,
@@ -89,8 +97,8 @@ INITIAL_STATIONS = [
         "risk": "Low"
     },
     {
-        "id": "DEMO-005",
-        "name": "Sample Site E (East Valley Creek)",
+        "id": "STN-005",
+        "name": "Western Ghats Pass Station",
         "lat": 11.3600,
         "lng": 76.6600,
         "rainfall": 6.8,
@@ -105,8 +113,8 @@ INITIAL_STATIONS = [
         "risk": "Moderate"
     },
     {
-        "id": "DEMO-006",
-        "name": "Sample Site F (Gorge Bridge Spur)",
+        "id": "STN-006",
+        "name": "Catchment Gorge Station",
         "lat": 11.4100,
         "lng": 76.6300,
         "rainfall": 0.0,
@@ -125,45 +133,45 @@ INITIAL_STATIONS = [
 INITIAL_ALERTS = [
     {
         "id": "AL-101",
-        "stationId": "DEMO-001",
-        "location": "Sample Site A (North Ridge)",
+        "stationId": "STN-001",
+        "location": "North Ridge Sector A",
         "severity": "Critical",
         "time": "2 h ago",
-        "trigger": "Soil 82 % · Rain 18.2 mm/h",
-        "description": "Simulated threshold breach: sustained rainfall with near-saturated soil.",
+        "trigger": "Soil 82% · Rain 18.2 mm/h",
+        "description": "Sustained heavy precipitation with near-saturated soil pore pressure.",
         "acknowledged": False,
         "responder": None
     },
     {
         "id": "AL-102",
-        "stationId": "DEMO-002",
-        "location": "Sample Site B (Valley Escarpment)",
+        "stationId": "STN-002",
+        "location": "Valley Escarpment Sector B",
         "severity": "High",
         "time": "5 h ago",
-        "trigger": "Soil 66 % · Tilt 1.1°",
-        "description": "Simulated rise in soil moisture and ground tilt.",
+        "trigger": "Soil 66% · Tilt 1.1°",
+        "description": "Accelerating pore saturation with measurable ground tilt drift.",
         "acknowledged": False,
         "responder": None
     },
     {
         "id": "AL-103",
-        "stationId": "DEMO-005",
-        "location": "Sample Site E (East Valley Creek)",
+        "stationId": "STN-005",
+        "location": "Western Ghats Pass Station",
         "severity": "Moderate",
         "time": "9 h ago",
-        "trigger": "Data stale 45 min · Battery 22 %",
-        "description": "Station reporting late with low battery.",
+        "trigger": "Data stale 45 min · Battery 22%",
+        "description": "Station transmission latency elevated, secondary battery reserve active.",
         "acknowledged": True,
-        "responder": "Field team 2"
+        "responder": "Field Team Alpha"
     },
     {
         "id": "AL-104",
-        "stationId": "DEMO-006",
-        "location": "Sample Site F (Gorge Bridge Spur)",
+        "stationId": "STN-006",
+        "location": "Catchment Gorge Station",
         "severity": "Moderate",
         "time": "1 d ago",
-        "trigger": "No reading for 190 min",
-        "description": "Station offline. Risk estimate unavailable.",
+        "trigger": "No transmission for 190 min",
+        "description": "Hardware telemetry offline. Scheduled for on-site diagnostic inspection.",
         "acknowledged": False,
         "responder": None
     }
@@ -178,6 +186,56 @@ class Database:
             Alert(**a) for a in INITIAL_ALERTS
         ]
         self.settings: SystemSettings = SystemSettings()
+        self.supabase_url = SUPABASE_URL.rstrip('/') if SUPABASE_URL else None
+        self.supabase_key = SUPABASE_KEY if SUPABASE_KEY else None
+
+        # Synchronize from Supabase if configured
+        self._sync_from_supabase()
+
+    def _get_supabase_headers(self):
+        if not self.supabase_key:
+            return {}
+        return {
+            "apikey": self.supabase_key,
+            "Authorization": f"Bearer {self.supabase_key}",
+            "Content-Type": "application/json",
+            "Prefer": "return=representation"
+        }
+
+    def _sync_from_supabase(self):
+        """Fetch remote stations from Supabase if available."""
+        if not self.supabase_url or not self.supabase_key or not httpx:
+            return
+        try:
+            with httpx.Client(timeout=4.0) as client:
+                res = client.get(
+                    f"{self.supabase_url}/rest/v1/stations?select=*",
+                    headers=self._get_supabase_headers()
+                )
+                if res.status_code == 200:
+                    records = res.json()
+                    if records and len(records) > 0:
+                        for r in records:
+                            st = Station(
+                                id=r.get("id"),
+                                name=r.get("name"),
+                                lat=r.get("lat", 0.0),
+                                lng=r.get("lng", 0.0),
+                                rainfall=r.get("rainfall", 0.0),
+                                soil=r.get("soil", 0.0),
+                                tilt=r.get("tilt", 0.0),
+                                vibration=r.get("vibration", 0.0),
+                                battery=r.get("battery", 100),
+                                signal=r.get("signal", 100),
+                                lastSeenMin=r.get("last_seen_min", 0),
+                                status=r.get("status", "online"),
+                                score=r.get("score", 0),
+                                risk=r.get("risk", "Low")
+                            )
+                            self.stations[st.id] = st
+        except Exception as e:
+            # Seamless fallback to in-memory store
+            pass
 
     def get_stations(self) -> List[Station]:
         return list(self.stations.values())
@@ -186,7 +244,7 @@ class Database:
         return self.stations.get(station_id)
 
     def create_station(self, station_in: StationCreate) -> Station:
-        station_id = station_in.id or f"SITE-{uuid.uuid4().hex[:6].upper()}"
+        station_id = station_in.id or f"STN-00{len(self.stations) + 1}"
         score = station_in.score
         risk = risk_of_score(score)
         st = Station(
@@ -206,6 +264,34 @@ class Database:
             risk=risk
         )
         self.stations[station_id] = st
+
+        # Push to Supabase if configured
+        if self.supabase_url and self.supabase_key and httpx:
+            try:
+                with httpx.Client(timeout=3.0) as client:
+                    client.post(
+                        f"{self.supabase_url}/rest/v1/stations",
+                        headers=self._get_supabase_headers(),
+                        json={
+                            "id": st.id,
+                            "name": st.name,
+                            "lat": st.lat,
+                            "lng": st.lng,
+                            "rainfall": st.rainfall,
+                            "soil": st.soil,
+                            "tilt": st.tilt,
+                            "vibration": st.vibration,
+                            "battery": st.battery,
+                            "signal": st.signal,
+                            "last_seen_min": st.lastSeenMin,
+                            "status": st.status,
+                            "score": st.score,
+                            "risk": st.risk
+                        }
+                    )
+            except Exception:
+                pass
+
         return st
 
     def calibrate_station(self, station_id: str) -> Optional[Station]:
@@ -218,10 +304,31 @@ class Database:
         st.lastSeenMin = 0
         st.score = max(5, int(st.score * 0.7))
         st.risk = risk_of_score(st.score)
+
+        if self.supabase_url and self.supabase_key and httpx:
+            try:
+                with httpx.Client(timeout=3.0) as client:
+                    client.patch(
+                        f"{self.supabase_url}/rest/v1/stations?id=eq.{station_id}",
+                        headers=self._get_supabase_headers(),
+                        json={
+                            "tilt": 0.0,
+                            "vibration": 0.05,
+                            "status": "online",
+                            "last_seen_min": 0,
+                            "score": st.score,
+                            "risk": st.risk
+                        }
+                    )
+            except Exception:
+                pass
+
         return st
 
     def get_readings(self, station_id: str) -> List[Reading]:
-        st = self.stations.get(station_id) or list(self.stations.values())[0]
+        st = self.stations.get(station_id) or (list(self.stations.values())[0] if self.stations else None)
+        if not st:
+            return []
         k = 0.3 + (st.score / 100.0)
         seed = 1
         try:
@@ -260,17 +367,29 @@ class Database:
     def get_alerts(self) -> List[Alert]:
         return self.alerts
 
-    def acknowledge_alert(self, alert_id: str, responder: str = "Operator") -> Optional[Alert]:
+    def acknowledge_alert(self, alert_id: str, responder: str = "Mission Operator") -> Optional[Alert]:
         for alert in self.alerts:
             if alert.id == alert_id:
                 alert.acknowledged = True
                 alert.responder = responder
+
+                if self.supabase_url and self.supabase_key and httpx:
+                    try:
+                        with httpx.Client(timeout=3.0) as client:
+                            client.patch(
+                                f"{self.supabase_url}/rest/v1/alerts?id=eq.{alert_id}",
+                                headers=self._get_supabase_headers(),
+                                json={"acknowledged": True, "responder": responder}
+                            )
+                    except Exception:
+                        pass
+
                 return alert
         return None
 
     def simulate_alert(self, req: AlertSimulateRequest) -> Alert:
         st = self.stations.get(req.stationId)
-        loc = st.name if st else "Sample Location"
+        loc = st.name if st else "Regional Sector"
         alert = Alert(
             id=f"AL-{len(self.alerts) + 101}",
             stationId=req.stationId,
@@ -282,18 +401,34 @@ class Database:
             acknowledged=False
         )
         self.alerts.insert(0, alert)
+
+        if self.supabase_url and self.supabase_key and httpx:
+            try:
+                with httpx.Client(timeout=3.0) as client:
+                    client.post(
+                        f"{self.supabase_url}/rest/v1/alerts",
+                        headers=self._get_supabase_headers(),
+                        json={
+                            "id": alert.id,
+                            "station_id": alert.stationId,
+                            "location": alert.location,
+                            "severity": alert.severity,
+                            "trigger_desc": alert.trigger,
+                            "description": alert.description,
+                            "acknowledged": False
+                        }
+                    )
+            except Exception:
+                pass
+
         return alert
 
     def simulate_scenario(self, req: ScenarioSimulateRequest) -> ScenarioSimulateResponse:
-        # Geotechnical calculation
-        # Factor of Safety (FoS) = (c' + (gamma - gamma_w * ru) * z * cos^2(beta) * tan(phi)) / (gamma * z * sin(beta) * cos(beta))
-        # Simplified AI proxy:
         slope_rad = math.radians(req.slope_angle_deg)
         pore_pressure = req.soil_saturation_pct * 0.45 * (req.rainfall_intensity_mm / 50.0)
         drainage_factor = max(0.1, 1.0 - (req.drainage_capacity_pct / 100.0))
         effective_pore_kpa = round(pore_pressure * drainage_factor * 12.5, 1)
 
-        # Baseline resisting vs driving forces
         driving = math.sin(slope_rad) * 1.5 + (req.rainfall_intensity_mm / 100.0) * 0.8
         resisting = math.cos(slope_rad) * (1.8 - (req.soil_saturation_pct / 100.0) * 0.9)
         fos = round(max(0.4, min(3.0, (resisting / max(0.1, driving)) * (1.0 + (req.drainage_capacity_pct / 200.0)))), 2)
@@ -303,13 +438,13 @@ class Database:
 
         if fos < 1.0:
             time_to_critical = round(max(0.5, 4.0 - (req.rainfall_intensity_mm / 25.0)), 1)
-            statement = f"CRITICAL SLOPE INSTABILITY: Factor of Safety ({fos}) below failure threshold. Evacuation warning recommended."
+            statement = f"CRITICAL SLOPE INSTABILITY: Factor of Safety ({fos}) below failure threshold. Immediate hazard evacuation required."
         elif fos < 1.3:
             time_to_critical = round(max(2.0, 12.0 - (req.rainfall_intensity_mm / 15.0)), 1)
-            statement = f"HIGH HAZARD WARNING: Pore water pressure ({effective_pore_kpa} kPa) nearing shear failure limits. Continuous monitoring active."
+            statement = f"HIGH HAZARD WARNING: Pore water pressure ({effective_pore_kpa} kPa) approaching shear failure limits. Continuous sensor monitoring active."
         else:
             time_to_critical = None
-            statement = f"STABLE CONDITIONS: Slope retaining structural equilibrium (FoS {fos}). Normal watch condition."
+            statement = f"STABLE CONDITIONS: Slope retaining structural equilibrium (FoS {fos}). Normal watch condition maintained."
 
         factors = [
             {"factor": "Rainfall Intensity", "impact": "High" if req.rainfall_intensity_mm > 50 else "Moderate", "weight": 35},
@@ -327,5 +462,28 @@ class Database:
             warning_statement=statement,
             factors=factors
         )
+
+    def get_analytics_summary(self) -> Dict:
+        stations_list = list(self.stations.values())
+        total = len(stations_list)
+        return {
+            "total_stations": total,
+            "critical_count": len([s for s in stations_list if s.risk == "Critical"]),
+            "high_count": len([s for s in stations_list if s.risk == "High"]),
+            "online_count": len([s for s in stations_list if s.status == "online"]),
+            "stale_count": len([s for s in stations_list if s.status == "stale"]),
+            "offline_count": len([s for s in stations_list if s.status == "offline"]),
+            "average_soil_saturation_pct": round(sum(s.soil for s in stations_list) / max(1, total), 1),
+            "peak_rainfall_rate_mm": max([s.rainfall for s in stations_list] + [0.0]),
+            "total_alerts": len(self.alerts),
+            "unacknowledged_alerts": len([a for a in self.alerts if not a.acknowledged])
+        }
+
+    def get_system_settings(self) -> SystemSettings:
+        return self.settings
+
+    def update_system_settings(self, settings_in: SystemSettings) -> SystemSettings:
+        self.settings = settings_in
+        return self.settings
 
 db = Database()

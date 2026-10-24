@@ -10,7 +10,7 @@ interface Props {
 }
 
 export default function HistoricalAnalytics({ stations }: Props) {
-  const [selectedStationId, setSelectedStationId] = useState<string>(stations[0]?.id || 'DEMO-001');
+  const [selectedStationId, setSelectedStationId] = useState<string>(stations[0]?.id || 'STN-001');
   const [readings, setReadings] = useState<Reading[]>([]);
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
   const [timeRange, setTimeRange] = useState<'24h' | '7d' | '30d'>('24h');
