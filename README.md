@@ -106,3 +106,4 @@ Access the application at: `http://localhost:5173`
 3. Under **Environment Variables**, add:
    - `VITE_API_URL`: Your Render backend URL (e.g. `https://landslideguard-ai-backend.onrender.com`)
 4. Click **Deploy**. Your full-stack enterprise platform is live!
+# landslideguard-ai
