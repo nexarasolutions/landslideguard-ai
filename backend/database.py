@@ -11,15 +11,18 @@ except ImportError:
 try:
     from backend.models import (
         Station, StationCreate, Reading, Alert, AlertSimulateRequest,
-        ScenarioSimulateRequest, ScenarioSimulateResponse, SystemSettings, Risk
+        ScenarioSimulateRequest, ScenarioSimulateResponse, SystemSettings, Risk,
+        TelemetryUpdate
     )
     from backend.config import SUPABASE_URL, SUPABASE_KEY
 except ImportError:
     from models import (
         Station, StationCreate, Reading, Alert, AlertSimulateRequest,
-        ScenarioSimulateRequest, ScenarioSimulateResponse, SystemSettings, Risk
+        ScenarioSimulateRequest, ScenarioSimulateResponse, SystemSettings, Risk,
+        TelemetryUpdate
     )
     from config import SUPABASE_URL, SUPABASE_KEY
+
 
 def risk_of_score(score: int) -> Risk:
     if score >= 75:
@@ -316,6 +319,76 @@ class Database:
                             "vibration": 0.05,
                             "status": "online",
                             "last_seen_min": 0,
+                            "score": st.score,
+                            "risk": st.risk
+                        }
+                    )
+            except Exception:
+                pass
+
+        return st
+
+    def update_telemetry(self, station_id: str, telemetry: TelemetryUpdate) -> Optional[Station]:
+        st = self.stations.get(station_id)
+        if not st:
+            st = Station(
+                id=station_id,
+                name=f"Field Telemetry Node ({station_id})",
+                lat=telemetry.lat if telemetry.lat is not None and telemetry.lat != 0.0 else 11.4000,
+                lng=telemetry.lng if telemetry.lng is not None and telemetry.lng != 0.0 else 76.7000,
+                rainfall=0.0,
+                soil=0.0,
+                tilt=0.0,
+                vibration=0.0,
+                battery=100,
+                signal=95,
+                lastSeenMin=0,
+                status="online",
+                score=10,
+                risk="Low"
+            )
+            self.stations[station_id] = st
+
+        soil_val = telemetry.soil if telemetry.soil is not None else telemetry.soil_moisture
+        if soil_val is not None:
+            st.soil = round(float(soil_val), 1)
+        if telemetry.rainfall is not None:
+            st.rainfall = round(float(telemetry.rainfall), 1)
+        if telemetry.tilt is not None:
+            st.tilt = round(float(telemetry.tilt), 2)
+        if telemetry.vibration is not None:
+            st.vibration = round(float(telemetry.vibration), 2)
+        if telemetry.battery is not None:
+            st.battery = int(telemetry.battery)
+        elif telemetry.voltage is not None:
+            pct = min(100, max(5, int((telemetry.voltage / 4.2) * 100))) if telemetry.voltage <= 5.0 else min(100, max(5, int((telemetry.voltage / 14.5) * 100)))
+            st.battery = pct
+        if telemetry.lat is not None and telemetry.lat != 0.0:
+            st.lat = telemetry.lat
+        if telemetry.lng is not None and telemetry.lng != 0.0:
+            st.lng = telemetry.lng
+
+        st.status = 'online'
+        st.lastSeenMin = 0
+
+        score = int(min(100, max(5, (st.soil * 0.4) + (st.rainfall * 2.0) + (st.tilt * 10.0) + (st.vibration * 15.0))))
+        st.score = score
+        st.risk = risk_of_score(score)
+
+        if self.supabase_url and self.supabase_key and httpx:
+            try:
+                with httpx.Client(timeout=3.0) as client:
+                    client.patch(
+                        f"{self.supabase_url}/rest/v1/stations?id=eq.{station_id}",
+                        headers=self._get_supabase_headers(),
+                        json={
+                            "rainfall": st.rainfall,
+                            "soil": st.soil,
+                            "tilt": st.tilt,
+                            "vibration": st.vibration,
+                            "battery": st.battery,
+                            "last_seen_min": 0,
+                            "status": "online",
                             "score": st.score,
                             "risk": st.risk
                         }

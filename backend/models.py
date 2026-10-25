@@ -46,7 +46,20 @@ class StationCreate(StationBase):
 class Station(StationBase):
     id: str
 
+class TelemetryUpdate(BaseModel):
+    station_id: Optional[str] = "STN-001"
+    soil: Optional[float] = None
+    soil_moisture: Optional[float] = None
+    rainfall: Optional[float] = None
+    tilt: Optional[float] = None
+    vibration: Optional[float] = None
+    voltage: Optional[float] = None
+    battery: Optional[int] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+
 class Reading(BaseModel):
+
     t: str
     rainfall: Optional[float] = None
     soil: Optional[float] = None
