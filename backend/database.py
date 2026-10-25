@@ -248,6 +248,10 @@ class Database:
         return list(self.stations.values())
 
     def get_station(self, station_id: str) -> Optional[Station]:
+        now = datetime.now(timezone.utc).timestamp()
+        if now - getattr(self, '_last_sync', 0) > 4.0:
+            self._sync_from_supabase()
+            self._last_sync = now
         return self.stations.get(station_id)
 
     def create_station(self, station_in: StationCreate) -> Station:
@@ -509,7 +513,7 @@ class Database:
                     )
                     if res.status_code == 200:
                         records = res.json()
-                        if records:
+                        if isinstance(records, list):
                             db_alerts = []
                             for r in records:
                                 db_alerts.append(Alert(
