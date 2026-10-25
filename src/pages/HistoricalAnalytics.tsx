@@ -22,11 +22,18 @@ export default function HistoricalAnalytics({ stations }: Props) {
 
   useEffect(() => {
     if (selectedStationId) {
-      setLoading(true);
+      if (readings.length === 0) setLoading(true);
       api.readings(selectedStationId)
         .then(data => setReadings(data))
         .catch(console.error)
         .finally(() => setLoading(false));
+
+      const timer = setInterval(() => {
+        api.readings(selectedStationId)
+          .then(data => setReadings(data))
+          .catch(console.error);
+      }, 5000);
+      return () => clearInterval(timer);
     }
   }, [selectedStationId]);
 
@@ -144,7 +151,7 @@ export default function HistoricalAnalytics({ stations }: Props) {
       </div>
 
       {/* Detailed Telemetry Charts */}
-      {loading ? (
+      {loading && readings.length === 0 ? (
         <div className="py-20 text-center text-slate-400">Loading historical telemetry curves...</div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { AlertTriangle, ArrowLeft } from 'lucide-react';
 import { api } from '../services/api';
 import { useAsync } from '../hooks';
@@ -7,6 +8,15 @@ import Trend from '../components/Trend';
 
 export default function StationDetail({ station: s, back }: { station: Station; back: () => void }) {
   const rd = useAsync(() => api.readings(s.id), [s.id]);
+
+  // Silently refresh station telemetry readings in background
+  useEffect(() => {
+    const timer = setInterval(() => {
+      rd.silentReload();
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [rd]);
+
   return (
     <div className="space-y-4">
       <button onClick={back} className="flex items-center gap-1 text-sm text-accent hover:underline"><ArrowLeft size={16} />Back to live monitoring</button>
@@ -19,7 +29,7 @@ export default function StationDetail({ station: s, back }: { station: Station; 
         {s.status !== 'online' && <p className="mt-3 flex items-center gap-2 rounded bg-yellow-400/10 p-2 text-yellow-300" role="alert"><AlertTriangle size={16} />
           {s.status === 'offline' ? 'Station is offline. Gaps in the charts denote periods without packet transmission.' : 'Data transmission is stale. Telemetry may not reflect current slope conditions.'}</p>}
       </Card>
-      <Async loading={rd.loading} error={rd.error} retry={rd.reload}>
+      <Async loading={rd.loading} error={rd.error} retry={rd.reload} hasData={Boolean(rd.data && rd.data.length > 0)}>
         <div className="grid gap-4 lg:grid-cols-2">
           <Trend title="Rainfall" unit="mm/h" data={rd.data ?? []} lines={[{ k: 'rainfall', name: 'Rainfall', c: '#60a5fa' }]} />
           <Trend title="Soil moisture" unit="%" data={rd.data ?? []} lines={[{ k: 'soil', name: 'Soil moisture', c: '#38bdf8' }]} />

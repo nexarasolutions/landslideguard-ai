@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { api } from '../services/api';
 import { useAsync } from '../hooks';
@@ -9,7 +10,17 @@ import Trend from '../components/Trend';
 const avg = (xs: (number | null)[]) => { const v = xs.filter((x): x is number => x != null); return v.length ? +(v.reduce((a, b) => a + b, 0) / v.length).toFixed(2) : null; };
 
 export default function Overview({ stations, alerts, open }: { stations: Station[]; alerts: Alert[]; open: (id: string) => void }) {
-  const rd = useAsync(() => Promise.all(stations.map(s => api.readings(s.id))), [stations]);
+  const stationIds = stations.map(s => s.id).join(',');
+  const rd = useAsync(() => Promise.all(stations.map(s => api.readings(s.id))), [stationIds]);
+
+  // Silently sync trend data in background without resetting charts
+  useEffect(() => {
+    const timer = setInterval(() => {
+      rd.silentReload();
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [rd]);
+
   const top = [...stations].sort((a, b) => b.score - a.score)[0];
   const n = (f: (s: Station) => boolean) => stations.filter(f).length;
   const kpis: [string, string | number][] = [
@@ -42,7 +53,7 @@ export default function Overview({ stations, alerts, open }: { stations: Station
           </PieChart></ResponsiveContainer></div>
         </Card>
       </div>
-      <Async loading={rd.loading} error={rd.error} retry={rd.reload}>
+      <Async loading={rd.loading} error={rd.error} retry={rd.reload} hasData={Boolean(all && all.length > 0)}>
         <div className="grid gap-4 lg:grid-cols-2">
           <Trend title="Rainfall, network average" unit="mm/h" data={merged} lines={[{ k: 'rainfall', name: 'Rainfall', c: '#60a5fa' }]} />
           <Trend title="Soil moisture, network average" unit="%" data={merged} lines={[{ k: 'soil', name: 'Soil moisture', c: '#38bdf8' }]} />

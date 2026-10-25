@@ -50,12 +50,12 @@ export default function App() {
   const stations = st.data ?? [];
   const alerts = al.data ?? [];
 
-  // Auto-refresh telemetry every 8 seconds for real-time live monitoring
+  // Auto-refresh telemetry quietly in background without full page reload or unmounting
   useEffect(() => {
     const timer = setInterval(() => {
-      st.reload();
-      al.reload();
-    }, 8000);
+      st.silentReload();
+      al.silentReload();
+    }, 4000);
     return () => clearInterval(timer);
   }, [st, al]);
 
@@ -200,7 +200,7 @@ export default function App() {
         </header>
 
         <main className="flex-1 p-4 md:p-6" id="main-content">
-          <Async loading={st.loading} error={st.error} retry={st.reload}>
+          <Async loading={st.loading} error={st.error} retry={st.reload} hasData={stations.length > 0}>
             {body()}
           </Async>
         </main>

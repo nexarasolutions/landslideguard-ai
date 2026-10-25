@@ -27,14 +27,36 @@ export const Card = ({ title, right, children }: { title?: string; right?: React
   </section>
 );
 
-export function Async({ loading, error, retry, children }: { loading: boolean; error: string | null; retry: () => void; children: ReactNode }) {
-  if (loading) return <div className="flex h-40 items-center justify-center gap-2 text-slate-400" role="status"><Loader2 className="animate-spin" size={18} />Loading…</div>;
-  if (error) return (
-    <div className="flex h-40 flex-col items-center justify-center gap-2 text-red-300" role="alert">
-      <AlertTriangle size={20} /><p>Could not load data: {error}</p>
-      <button onClick={retry} className="rounded bg-line px-3 py-1 text-slate-100">Retry</button>
-    </div>
-  );
+export function Async({
+  loading,
+  error,
+  retry,
+  hasData = false,
+  children
+}: {
+  loading: boolean;
+  error: string | null;
+  retry: () => void;
+  hasData?: boolean;
+  children: ReactNode;
+}) {
+  // If we already have data, keep the UI static and don't wipe children
+  if (loading && !hasData) {
+    return (
+      <div className="flex h-40 items-center justify-center gap-2 text-slate-400" role="status">
+        <Loader2 className="animate-spin" size={18} />Loading…
+      </div>
+    );
+  }
+  if (error && !hasData) {
+    return (
+      <div className="flex h-40 flex-col items-center justify-center gap-2 text-red-300" role="alert">
+        <AlertTriangle size={20} />
+        <p>Could not load data: {error}</p>
+        <button onClick={retry} className="rounded bg-line px-3 py-1 text-slate-100">Retry</button>
+      </div>
+    );
+  }
   return <>{children}</>;
 }
 
