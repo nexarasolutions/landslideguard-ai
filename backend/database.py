@@ -33,101 +33,21 @@ def risk_of_score(score: int) -> Risk:
         return 'Moderate'
     return 'Low'
 
-# Real-world operational IoT telemetry monitoring stations
+# Operational IoT telemetry monitoring device
 INITIAL_STATIONS = [
     {
         "id": "STN-001",
-        "name": "North Ridge Sector A",
-        "lat": 11.4000,
-        "lng": 76.7000,
-        "rainfall": 18.2,
-        "soil": 82.0,
-        "tilt": 2.4,
-        "vibration": 1.9,
-        "battery": 78,
-        "signal": 84,
-        "lastSeenMin": 2,
-        "status": "online",
-        "score": 78,
-        "risk": "Critical"
-    },
-    {
-        "id": "STN-002",
-        "name": "Valley Escarpment Sector B",
-        "lat": 11.4300,
-        "lng": 76.7400,
-        "rainfall": 9.5,
-        "soil": 66.0,
-        "tilt": 1.1,
-        "vibration": 0.8,
-        "battery": 91,
-        "signal": 72,
-        "lastSeenMin": 3,
-        "status": "online",
-        "score": 58,
-        "risk": "High"
-    },
-    {
-        "id": "STN-003",
-        "name": "High Slope Observatory",
-        "lat": 11.3800,
-        "lng": 76.7500,
-        "rainfall": 4.1,
-        "soil": 48.0,
-        "tilt": 0.5,
-        "vibration": 0.3,
-        "battery": 64,
-        "signal": 90,
-        "lastSeenMin": 1,
-        "status": "online",
-        "score": 33,
-        "risk": "Moderate"
-    },
-    {
-        "id": "STN-004",
-        "name": "Rail Corridor Incline Sector D",
-        "lat": 11.4500,
-        "lng": 76.6700,
-        "rainfall": 1.2,
-        "soil": 31.0,
-        "tilt": 0.2,
-        "vibration": 0.1,
-        "battery": 88,
-        "signal": 95,
-        "lastSeenMin": 4,
-        "status": "online",
-        "score": 12,
-        "risk": "Low"
-    },
-    {
-        "id": "STN-005",
-        "name": "Western Ghats Pass Station",
-        "lat": 11.3600,
-        "lng": 76.6600,
-        "rainfall": 6.8,
-        "soil": 55.0,
-        "tilt": 0.9,
-        "vibration": 0.5,
-        "battery": 22,
-        "signal": 41,
-        "lastSeenMin": 45,
-        "status": "stale",
-        "score": 41,
-        "risk": "Moderate"
-    },
-    {
-        "id": "STN-006",
-        "name": "Catchment Gorge Station",
-        "lat": 11.4100,
-        "lng": 76.6300,
+        "name": "LandslideGuard AI - Live Node",
+        "lat": 11.3164,
+        "lng": 77.5525,
         "rainfall": 0.0,
         "soil": 0.0,
         "tilt": 0.0,
         "vibration": 0.0,
-        "battery": 5,
-        "signal": 0,
-        "lastSeenMin": 190,
-        "status": "offline",
+        "battery": 100,
+        "signal": 100,
+        "lastSeenMin": 0,
+        "status": "online",
         "score": 0,
         "risk": "Low"
     }
@@ -218,6 +138,7 @@ class Database:
                 if res.status_code == 200:
                     records = res.json()
                     if records and len(records) > 0:
+                        new_stations = {}
                         for r in records:
                             st = Station(
                                 id=r.get("id"),
@@ -235,7 +156,8 @@ class Database:
                                 score=r.get("score", 0),
                                 risk=r.get("risk", "Low")
                             )
-                            self.stations[st.id] = st
+                            new_stations[st.id] = st
+                        self.stations = new_stations
         except Exception as e:
             # Seamless fallback to in-memory store
             pass
@@ -391,6 +313,9 @@ class Database:
                         f"{self.supabase_url}/rest/v1/stations?id=eq.{station_id}",
                         headers=self._get_supabase_headers(),
                         json={
+                            "name": st.name,
+                            "lat": st.lat,
+                            "lng": st.lng,
                             "rainfall": st.rainfall,
                             "soil": st.soil,
                             "tilt": st.tilt,
