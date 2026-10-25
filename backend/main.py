@@ -15,9 +15,11 @@ from fastapi.middleware.cors import CORSMiddleware
 try:
     from backend.config import ALLOWED_ORIGINS
     from backend.routers import auth, stations, alerts, analytics, settings
+    from backend.database import db
 except ImportError:
     from config import ALLOWED_ORIGINS
     from routers import auth, stations, alerts, analytics, settings
+    from database import db
 
 app = FastAPI(
     title="LandslideGuard AI API",
@@ -45,11 +47,19 @@ app.include_router(settings.router)
 
 @app.get("/health", tags=["System"])
 async def health():
+    supabase_configured = bool(db.supabase_url and db.supabase_key)
     return {
         "status": "healthy",
         "service": "LandslideGuard AI Backend",
-        "version": "1.0.0"
+        "version": "1.0.0",
+        "database": {
+            "connected": supabase_configured,
+            "type": "Supabase PostgreSQL",
+            "endpoint": db.supabase_url if db.supabase_url else "In-Memory Fallback",
+            "active_stations": len(db.stations)
+        }
     }
+
 
 @app.get("/", tags=["System"])
 async def root():

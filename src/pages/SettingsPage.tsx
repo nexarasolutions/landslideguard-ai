@@ -39,12 +39,14 @@ export default function SettingsPage() {
   };
 
   const checkBackend = async () => {
-    setBackendStatus('Pinging backend...');
+    setBackendStatus('Pinging backend & database...');
     try {
-      const url = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-      const res = await fetch(`${url}/health`, { signal: AbortSignal.timeout(3000) });
+      const url = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/+$/, '');
+      const res = await fetch(`${url}/health`, { signal: AbortSignal.timeout(5000) });
       if (res.ok) {
-        setBackendStatus('Connected: Backend is Healthy (200 OK)');
+        const data = await res.json();
+        const dbStatus = data?.database?.connected ? 'Supabase Connected' : 'Local In-Memory';
+        setBackendStatus(`Online (200 OK) · Database: ${dbStatus} (${data?.database?.active_stations ?? 6} stations)`);
       } else {
         setBackendStatus(`Response status: ${res.status}`);
       }
