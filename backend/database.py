@@ -241,6 +241,10 @@ class Database:
             pass
 
     def get_stations(self) -> List[Station]:
+        now = datetime.now(timezone.utc).timestamp()
+        if now - getattr(self, '_last_sync', 0) > 4.0:
+            self._sync_from_supabase()
+            self._last_sync = now
         return list(self.stations.values())
 
     def get_station(self, station_id: str) -> Optional[Station]:
@@ -377,7 +381,8 @@ class Database:
 
         if self.supabase_url and self.supabase_key and httpx:
             try:
-                with httpx.Client(timeout=3.0) as client:
+                with httpx.Client(timeout=4.0) as client:
+                    # 1. Update station state in Supabase
                     client.patch(
                         f"{self.supabase_url}/rest/v1/stations?id=eq.{station_id}",
                         headers=self._get_supabase_headers(),
@@ -390,9 +395,45 @@ class Database:
                             "last_seen_min": 0,
                             "status": "online",
                             "score": st.score,
-                            "risk": st.risk
+                            "risk": st.risk,
+                            "updated_at": datetime.now(timezone.utc).isoformat()
                         }
                     )
+
+                    # 2. Insert telemetry reading record into public.readings
+                    reading_row = {
+                        "station_id": station_id,
+                        "rainfall": st.rainfall,
+                        "soil_moisture": st.soil,
+                        "tilt_angle": st.tilt,
+                        "vibration": st.vibration,
+                        "battery_pct": st.battery,
+                        "signal_rssi": st.signal
+                    }
+                    client.post(
+                        f"{self.supabase_url}/rest/v1/readings",
+                        headers=self._get_supabase_headers(),
+                        json=reading_row
+                    )
+
+                    # 3. If critical or high risk, auto-create alert in Supabase
+                    if st.risk in ('Critical', 'High'):
+                        alert_id = f"AL-{int(datetime.now(timezone.utc).timestamp()) % 1000000}"
+                        trigger_text = f"Soil {st.soil}% · Tilt {st.tilt}° · Vib {st.vibration} mm/s"
+                        alert_row = {
+                            "id": alert_id,
+                            "station_id": station_id,
+                            "location": st.name,
+                            "severity": st.risk,
+                            "trigger_desc": trigger_text,
+                            "description": f"Real-time sensor threshold breach detected at {st.name}. Immediate geotechnical attention recommended.",
+                            "acknowledged": False
+                        }
+                        client.post(
+                            f"{self.supabase_url}/rest/v1/alerts",
+                            headers=self._get_supabase_headers(),
+                            json=alert_row
+                        )
             except Exception:
                 pass
 
@@ -402,6 +443,35 @@ class Database:
         st = self.stations.get(station_id) or (list(self.stations.values())[0] if self.stations else None)
         if not st:
             return []
+
+        # First, try to fetch real saved readings from Supabase
+        if self.supabase_url and self.supabase_key and httpx:
+            try:
+                with httpx.Client(timeout=4.0) as client:
+                    res = client.get(
+                        f"{self.supabase_url}/rest/v1/readings?station_id=eq.{station_id}&order=recorded_at.desc&limit=48",
+                        headers=self._get_supabase_headers()
+                    )
+                    if res.status_code == 200:
+                        rows = res.json()
+                        if rows and len(rows) > 0:
+                            rows.reverse()
+                            real_readings = []
+                            for r in rows:
+                                rec_at = r.get("recorded_at") or ""
+                                t_str = rec_at[11:16] if ("T" in rec_at and len(rec_at) >= 16) else "Now"
+                                real_readings.append(Reading(
+                                    t=t_str,
+                                    rainfall=r.get("rainfall"),
+                                    soil=r.get("soil_moisture"),
+                                    tilt=r.get("tilt_angle"),
+                                    vibration=r.get("vibration")
+                                ))
+                            return real_readings
+            except Exception:
+                pass
+
+        # Fallback to realistic baseline telemetry if no records in Supabase yet
         k = 0.3 + (st.score / 100.0)
         seed = 1
         try:
@@ -410,35 +480,55 @@ class Database:
             seed = 3
 
         readings: List[Reading] = []
-        for i in range(48):
-            gap = st.status == 'offline' and 18 < i < 36
-            hour = (24 + (i - 48)) % 24
+        for i in range(24):
+            hour = (24 + (i - 24)) % 24
             time_str = f"{hour:02d}:00"
+            w1 = math.sin(i / 5.0 + seed * 1.0)
+            w2 = math.sin(i / 5.0 + seed * 2.0)
+            rain = round(max(0.0, (1.0 + 3.0 * w1) * k), 1)
+            soil = round(min(100.0, max(0.0, st.soil - 10.0 + 8.0 * w2)), 1)
+            tilt = round(max(0.0, st.tilt * 0.8 + 0.1 * w1), 2)
+            vib = round(max(0.0, st.vibration * 0.8 + 0.05 * abs(w2)), 2)
 
-            if gap:
-                readings.append(Reading(t=time_str, rainfall=None, soil=None, tilt=None, vibration=None))
-            else:
-                w1 = math.sin(i / 5.0 + seed * 1.0)
-                w2 = math.sin(i / 5.0 + seed * 2.0)
-                w3 = math.sin(i / 5.0 + seed * 3.0)
-                w4 = math.sin(i / 5.0 + seed * 4.0)
-
-                rain = round(max(0.0, (3.0 + 5.0 * w1) * k * 1.6), 2)
-                soil = round(min(100.0, max(0.0, 35.0 + 12.0 * w2 + i * 0.4 * k + st.score * 0.2)), 2)
-                tilt = round(max(0.0, 0.3 + (i / 47.0) * st.tilt + 0.1 * w3), 2)
-                vib = round(max(0.0, 0.2 + 0.5 * k * abs(w4)), 2)
-
-                readings.append(Reading(
-                    t=time_str,
-                    rainfall=rain,
-                    soil=soil,
-                    tilt=tilt,
-                    vibration=vib
-                ))
+            readings.append(Reading(
+                t=time_str,
+                rainfall=rain,
+                soil=soil,
+                tilt=tilt,
+                vibration=vib
+            ))
         return readings
 
     def get_alerts(self) -> List[Alert]:
+        if self.supabase_url and self.supabase_key and httpx:
+            try:
+                with httpx.Client(timeout=3.0) as client:
+                    res = client.get(
+                        f"{self.supabase_url}/rest/v1/alerts?select=*&order=created_at.desc&limit=50",
+                        headers=self._get_supabase_headers()
+                    )
+                    if res.status_code == 200:
+                        records = res.json()
+                        if records:
+                            db_alerts = []
+                            for r in records:
+                                db_alerts.append(Alert(
+                                    id=r.get("id"),
+                                    stationId=r.get("station_id") or "STN-001",
+                                    location=r.get("location") or "Regional Sector",
+                                    severity=r.get("severity") or "Low",
+                                    time=r.get("time_str") or "Recent",
+                                    trigger=r.get("trigger_desc") or "",
+                                    description=r.get("description") or "",
+                                    acknowledged=bool(r.get("acknowledged")),
+                                    responder=r.get("responder")
+                                ))
+                            self.alerts = db_alerts
+                            return self.alerts
+            except Exception:
+                pass
         return self.alerts
+
 
     def acknowledge_alert(self, alert_id: str, responder: str = "Mission Operator") -> Optional[Alert]:
         for alert in self.alerts:

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import {
   Activity, BarChart3, Bell, BrainCircuit, FileText,
   LayoutDashboard, Map, Menu, Radio, Search, Settings, ShieldAlert, X,
@@ -49,6 +49,16 @@ export default function App() {
   const al = useAsync(api.alerts, []);
   const stations = st.data ?? [];
   const alerts = al.data ?? [];
+
+  // Auto-refresh telemetry every 8 seconds for real-time live monitoring
+  useEffect(() => {
+    const timer = setInterval(() => {
+      st.reload();
+      al.reload();
+    }, 8000);
+    return () => clearInterval(timer);
+  }, [st, al]);
+
 
   const open = useCallback((id: string) => {
     setSel(id);
