@@ -45,19 +45,10 @@ export default function App() {
     role: 'Admin'
   });
 
-  const st = useAsync(api.stations, []);
-  const al = useAsync(api.alerts, []);
+  const st = useAsync(api.stations, [], 4000);
+  const al = useAsync(api.alerts, [], 4000);
   const stations = st.data ?? [];
   const alerts = al.data ?? [];
-
-  // Auto-refresh telemetry quietly in background without full page reload or unmounting
-  useEffect(() => {
-    const timer = setInterval(() => {
-      st.silentReload();
-      al.silentReload();
-    }, 4000);
-    return () => clearInterval(timer);
-  }, [st, al]);
 
 
   const open = useCallback((id: string) => {

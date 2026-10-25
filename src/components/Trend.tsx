@@ -14,8 +14,18 @@ export default function Trend({ title, unit, data, lines }: { title: string; uni
             <YAxis stroke="#94a3b8" fontSize={11} width={44} label={{ value: unit, angle: -90, position: 'insideLeft', fill: '#94a3b8', fontSize: 11 }} />
             <Tooltip contentStyle={{ background: '#0B1220', border: '1px solid #243049', color: '#e2e8f0' }}
               formatter={(v: unknown) => (v == null ? 'No reading' : `${v} ${unit}`)} />
-            <Legend />
-            {lines.map(l => <Line key={l.k} dataKey={l.k} name={l.name} stroke={l.c} strokeWidth={2} dot={false} connectNulls={false} />)}
+            {lines.map(l => (
+              <Line
+                key={l.k}
+                dataKey={l.k}
+                name={l.name}
+                stroke={l.c}
+                strokeWidth={2}
+                dot={false}
+                connectNulls={false}
+                isAnimationActive={false}
+              />
+            ))}
           </LineChart>
         </ResponsiveContainer>
       </div>

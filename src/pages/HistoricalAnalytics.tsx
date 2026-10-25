@@ -30,7 +30,9 @@ export default function HistoricalAnalytics({ stations }: Props) {
 
       const timer = setInterval(() => {
         api.readings(selectedStationId)
-          .then(data => setReadings(data))
+          .then(data => {
+            setReadings(prev => JSON.stringify(prev) === JSON.stringify(data) ? prev : data);
+          })
           .catch(console.error);
       }, 5000);
       return () => clearInterval(timer);

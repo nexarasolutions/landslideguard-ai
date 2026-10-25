@@ -7,15 +7,7 @@ import { Async, Card, LiveStatusBadge, RiskBadge } from '../components/ui';
 import Trend from '../components/Trend';
 
 export default function StationDetail({ station: s, back }: { station: Station; back: () => void }) {
-  const rd = useAsync(() => api.readings(s.id), [s.id]);
-
-  // Silently refresh station telemetry readings in background
-  useEffect(() => {
-    const timer = setInterval(() => {
-      rd.silentReload();
-    }, 4000);
-    return () => clearInterval(timer);
-  }, [rd]);
+  const rd = useAsync(() => api.readings(s.id), [s.id], 5000);
 
   return (
     <div className="space-y-4">

@@ -31,16 +31,7 @@ export default function Overview({ stations, alerts, open }: Props) {
     risk: 'Low'
   };
 
-  const rd = useAsync(() => api.readings(device.id), [device.id]);
-
-  // Silently refresh time-series telemetry in the background
-  useEffect(() => {
-    const timer = setInterval(() => {
-      rd.silentReload();
-    }, 4000);
-    return () => clearInterval(timer);
-  }, [rd]);
-
+  const rd = useAsync(() => api.readings(device.id), [device.id], 5000);
   const readings: Reading[] = rd.data ?? [];
   const riskColor = RC[device.risk];
 
